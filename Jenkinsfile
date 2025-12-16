@@ -29,7 +29,7 @@ pipeline {
             }
             steps {
                 git credentialsId: 'jenkins-github-classic-token1',
-                    url: 'https://github.com/ezderm-llc/tasks-cleaner.git',
+                    url: 'https://github.com/ezdjordje/tasks-cleaner.git',
                     branch: params.commit_hash
 
                 script {
