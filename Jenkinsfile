@@ -1,6 +1,6 @@
 //
 // Jenkinsfile for Unread Tasks Cleaner
-// Executes Redis cleanup script on tomcat1-prod.ezinfra.net
+// Executes Redis cleanup script on tomcat1-prod.ezinfra.net via SSH
 //
 def SCRIPT_STATUS = "Not Started"
 def SCRIPT_OUTPUT = ""
@@ -8,7 +8,11 @@ def SCRIPT_OUTPUT = ""
 pipeline {
     agent none
     environment {
+        ANSIBLE_VER = "11.8.0"
         PYTHON_VERSION = "3"
+        REMOTE_SERVER = "tomcat1-prod.ezinfra.net"
+        REMOTE_USER = "ubuntu"
+        REMOTE_DIR = "/tmp/tasks-cleaner"
     }
     parameters {
         string(name: 'commit_hash', defaultValue: 'main', description: 'Git commit hash or branch to checkout')
@@ -16,7 +20,12 @@ pipeline {
     stages {
         stage ("Run Tasks Cleaner") {
             agent {
-                label 'tomcat1-prod.ezinfra.net'
+                docker {
+                    image "nexus.ezinfra.net:5001/ezderm/ansible:${ANSIBLE_VER}"
+                    registryUrl "https://nexus.ezinfra.net:5001/"
+                    registryCredentialsId "user_for_nexus_docker_repo"
+                    args "--entrypoint='' -u root"
+                }
             }
             steps {
                 git credentialsId: 'jenkins-github-classic-token1',
@@ -24,15 +33,26 @@ pipeline {
                     branch: params.commit_hash
 
                 script {
-                    // Run the cleanup script
-                    def output = sh(
-                        script: "python${PYTHON_VERSION} unread-tasks-cleaner.py",
-                        returnStdout: true
-                    ).trim()
+                    sshagent(['jenkins-deploy-key']) {
+                        // Create remote directory
+                        sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_SERVER} 'mkdir -p ${REMOTE_DIR}'"
 
-                    SCRIPT_OUTPUT = output
-                    echo "Script completed successfully"
-                    echo output
+                        // Copy script to remote server
+                        sh "scp -o StrictHostKeyChecking=no unread-tasks-cleaner.py ${REMOTE_USER}@${REMOTE_SERVER}:${REMOTE_DIR}/"
+
+                        // Execute the script on remote server
+                        def output = sh(
+                            script: "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_SERVER} 'cd ${REMOTE_DIR} && python${PYTHON_VERSION} unread-tasks-cleaner.py'",
+                            returnStdout: true
+                        ).trim()
+
+                        // Cleanup remote directory
+                        sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_SERVER} 'rm -rf ${REMOTE_DIR}'"
+
+                        SCRIPT_OUTPUT = output
+                        echo "Script completed successfully"
+                        echo output
+                    }
                 }
             }
             post {
@@ -53,7 +73,12 @@ pipeline {
         }
         stage ("Cleanup") {
             agent {
-                label 'tomcat1-prod.ezinfra.net'
+                docker {
+                    image "nexus.ezinfra.net:5001/ezderm/ansible:${ANSIBLE_VER}"
+                    registryUrl "https://nexus.ezinfra.net:5001/"
+                    registryCredentialsId "user_for_nexus_docker_repo"
+                    args "--entrypoint='' -u root"
+                }
             }
             steps {
                 cleanWs(deleteDirs: true)
