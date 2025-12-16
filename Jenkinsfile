@@ -2,22 +2,45 @@
 // Jenkinsfile for Unread Tasks Cleaner
 // Executes Redis cleanup script on tomcat1-prod.ezinfra.net via SSH
 //
+// Slack channel: java_ops
+//
+def SLACK_RESPONSE
 def SCRIPT_STATUS = "Not Started"
 def SCRIPT_OUTPUT = ""
 
 pipeline {
     agent none
     environment {
+        SLACK_CHANNEL = "java_ops"
+        SLACK_JOB_ICON = ":broom:"
+        SLACK_JOB_OK = ":meow_checkmark:"
+        SLACK_JOB_START = ":cat-fast:"
+        SLACK_BUILD_INFO = "( <${BUILD_URL} | ${JOB_NAME} ${BUILD_NUMBER}> ) by *${BUILD_USER}*"
         ANSIBLE_VER = "11.8.0"
         PYTHON_VERSION = "3"
         REMOTE_SERVER = "tomcat1-prod.ezinfra.net"
         REMOTE_USER = "ubuntu"
         REMOTE_DIR = "/tmp/tasks-cleaner"
+        UBUNTU_VER = "24.04"
     }
     parameters {
         string(name: 'commit_hash', defaultValue: 'main', description: 'Git commit hash or branch to checkout')
     }
     stages {
+        stage ("Notify") {
+            agent {
+                docker { image "ubuntu:${UBUNTU_VER}" }
+            }
+            steps {
+                script {
+                    SLACK_RESPONSE = slackSend botUser: true,
+                        channel: "${SLACK_CHANNEL}",
+                        color: "good",
+                        message: "${SLACK_JOB_ICON} *Starting Unread Tasks Cleaner* ${SLACK_JOB_START} - ${SLACK_BUILD_INFO} on node: *${NODE_NAME}* \n • Commit: `${params.commit_hash}` \n • Target Server: `${REMOTE_SERVER}`",
+                        tokenCredentialId: "JenkinsBotUser"
+                }
+            }
+        }
         stage ("Run Tasks Cleaner") {
             agent {
                 docker {
@@ -61,12 +84,20 @@ pipeline {
                         SCRIPT_STATUS = "Success"
                         echo "✓ Tasks Cleaner completed successfully"
                         echo "Output: ${SCRIPT_OUTPUT}"
+
+                        slackSend channel: SLACK_RESPONSE.threadId,
+                            color: "good",
+                            message: "Tasks Cleaner completed successfully\n```${SCRIPT_OUTPUT}```"
                     }
                 }
                 failure {
                     script {
                         SCRIPT_STATUS = "Failed"
                         echo "✗ Tasks Cleaner failed"
+
+                        slackSend channel: SLACK_RESPONSE.threadId,
+                            color: "danger",
+                            message: "Tasks Cleaner execution failed"
                     }
                 }
             }
@@ -94,6 +125,11 @@ pipeline {
                 echo "Commit: ${params.commit_hash}"
                 echo "Script Status: ${SCRIPT_STATUS}"
                 echo "=========================================="
+
+                slackSend channel: SLACK_RESPONSE.threadId,
+                    color: "good",
+                    message: "${SLACK_JOB_ICON} *Job Successful* ${SLACK_JOB_OK} - ${SLACK_BUILD_INFO}\n • Job duration: ${currentBuild.durationString}\n • Commit: `${params.commit_hash}`\n • Script Status: *${SCRIPT_STATUS}*",
+                    timestamp: SLACK_RESPONSE.ts
             }
         }
         failure {
@@ -104,6 +140,17 @@ pipeline {
                 echo "Commit: ${params.commit_hash}"
                 echo "Script Status: ${SCRIPT_STATUS}"
                 echo "=========================================="
+
+                try {
+                    slackSend channel: SLACK_RESPONSE.threadId,
+                        color: "danger",
+                        message: "${SLACK_JOB_ICON} *Job Failed* - ${SLACK_BUILD_INFO}\n • Job duration: ${currentBuild.durationString}\n • Commit: `${params.commit_hash}`\n • Script Status: *${SCRIPT_STATUS}*",
+                        timestamp: SLACK_RESPONSE.ts
+                } catch (Exception ex) {
+                    slackSend channel: SLACK_CHANNEL,
+                        color: "danger",
+                        message: "Job Failed - ${SLACK_BUILD_INFO}\n • Error: ${ex.message}"
+                }
             }
         }
     }
