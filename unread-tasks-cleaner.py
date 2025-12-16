@@ -1,7 +1,7 @@
 import redis
 from redis.connection import SSLConnection
 
-redis_url = "rediss://:aRPsR1MsTgsNfsRa5sOS-QjWDhgLdHSgfGN6-UaXsYg8T-IXnJhfKdISXS0D@prod-ha-cluster-1-001.prod-ha-cluster-1.0mpaqo.use1.cache.amazonaws.com:6379"
+redis_url = "rediss://:aRPsR1MsTgsNfsRa5sOS-QjWDhgLdHSgfGN6-UaXsYg8T-IXnJhfKdISXS0D@master.prod-ha-cluster-1.0mpaqo.use1.cache.amazonaws.com:6379"
 
 r = redis.Redis.from_url(redis_url, connection_class=SSLConnection)
 
