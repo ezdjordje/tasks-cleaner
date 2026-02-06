@@ -23,9 +23,6 @@ pipeline {
         REMOTE_DIR = "/tmp/tasks-cleaner"
         UBUNTU_VER = "24.04"
     }
-    parameters {
-        string(name: 'commit_hash', defaultValue: 'main', description: 'Git commit hash or branch to checkout')
-    }
     stages {
         stage ("Notify") {
             agent {
@@ -52,7 +49,7 @@ pipeline {
             }
             steps {
                 git credentialsId: 'jenkins-github-classic-token1',
-                    url: 'https://github.com/ezdjordje/tasks-cleaner.git',
+                    url: 'https://github.com/ezderm-llc/tasks-cleaner.git',
                     branch: params.commit_hash
 
                 script {
